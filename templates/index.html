@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}FoodShare - Reduce Food Waste{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-content">
+        <h1>🍏 FoodShare</h1>
+        <p class="hero-subtitle">Connecting surplus food with those who need it most</p>
+        <p>Join our mission to reduce food waste and fight hunger in your community.</p>
+        <div class="hero-buttons">
+            <a href="{{ url_for('auth') }}" class="btn">Get Started</a>
+            <a href="#how-it-works" class="btn btn-secondary">Learn More</a>
+        </div>
+    </div>
+</section>
+
+{% if top_donor %}
+<section class="spotlight-section">
+    <div class="spotlight-container">
+        <div class="spotlight-badge">🏆 Star Donor of the Month</div>
+        <div class="spotlight-card">
+            <div class="spotlight-content">
+                <h2>{{ top_donor.org or top_donor.name }}</h2>
+                <div class="spotlight-stats">
+                    <div class="s-stat">
+                        <span class="s-icon">🎁</span>
+                        <span class="s-val">{{ top_donor.count }}</span>
+                        <span class="s-lbl">Donations</span>
+                    </div>
+                    <div class="s-stat">
+                        <span class="s-icon">✨</span>
+                        <span class="s-val">{{ top_donor.specialty }}</span>
+                        <span class="s-lbl">Specialty</span>
+                    </div>
+                </div>
+                <p class="spotlight-footer">Member since {{ top_donor.member_since }} • Making a difference!</p>
+            </div>
+            <div class="spotlight-visual">
+                <div class="trophy-anim">🏆</div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section id="how-it-works" class="card">
+    <h2>How It Works</h2>
+    <div class="grid">
+        <div class="feature-card">
+            <div class="feature-icon">🍽️</div>
+            <h3>For Donors</h3>
+            <p>Post your surplus food with details about quantity, type, and pickup location. Nearby receivers get
+                notified instantly.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🏢</div>
+            <h3>For Receivers/NGOs</h3>
+            <p>Browse available donations, claim what you need, and pick up the food using a secure OTP verification
+                system.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔒</div>
+            <h3>Safe & Verified</h3>
+            <p>All NGOs and receivers are verified by our admin team before they can access the marketplace.</p>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Why Choose FoodShare?</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">🌍</div>
+            <div class="stat-info">
+                <span class="stat-label">Reduce Waste</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">❤️</div>
+            <div class="stat-info">
+                <span class="stat-label">Feed the Hungry</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🤝</div>
+            <div class="stat-info">
+                <span class="stat-label">Build Community</span>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

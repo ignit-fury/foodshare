@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}Delivery Dashboard - FoodShare{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1>🚴 Delivery Partner Dashboard</h1>
+        <p>Pick up food from donors and deliver to NGOs</p>
+    </div>
+    <div class="notification-bell" onclick="toggleNotifications()">
+        🔔 <span id="notifCount" class="badge" {% if unread_count==0 %}style="display:none" {% endif %}>{{ unread_count
+            }}</span>
+    </div>
+</div>
+
+<div id="notificationPanel" class="notification-panel" style="display: none;">
+    <div class="notif-header">
+        <h3>Notifications</h3>
+        <button onclick="markAllRead()" class="btn-small">Mark all read</button>
+    </div>
+    <div id="notifList">
+        {% for n in notifications %}
+        <div class="notif-item {{ '' if n.read else 'unread' }}">
+            <p>{{ n.message }}</p>
+            <span class="notif-time">{{ n.created_at.strftime('%b %d, %H:%M') }}</span>
+        </div>
+        {% else %}
+        <p class="empty-notif">No notifications yet</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card" style="background: linear-gradient(135deg, #4CAF50, #66BB6A);">
+        <div class="stat-icon">🚚</div>
+        <div class="stat-info">
+            <span class="stat-number" style="color: white;">{{ today_count }}</span>
+            <span class="stat-label" style="color: rgba(255,255,255,0.9);">Deliveries Today</span>
+        </div>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #2196F3, #42A5F5);">
+        <div class="stat-icon">📦</div>
+        <div class="stat-info">
+            <span class="stat-number" style="color: white;">{{ available|length }}</span>
+            <span class="stat-label" style="color: rgba(255,255,255,0.9);">Available Jobs</span>
+        </div>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #FF9800, #FFB74D);">
+        <div class="stat-icon">🎯</div>
+        <div class="stat-info">
+            <span class="stat-number" style="color: white;">{{ my_active|length }}</span>
+            <span class="stat-label" style="color: rgba(255,255,255,0.9);">Active Now</span>
+        </div>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #9C27B0, #BA68C8);">
+        <div class="stat-icon">✅</div>
+        <div class="stat-info">
+            <span class="stat-number" style="color: white;">{{ total_completed }}</span>
+            <span class="stat-label" style="color: rgba(255,255,255,0.9);">Total Completed</span>
+        </div>
+    </div>
+</div>
+
+<!-- My Active Deliveries -->
+{% if my_active %}
+<section class="card" style="border: 2px solid #FF9800; background: linear-gradient(135deg, #fff8e1, #fff3e0);">
+    <h2 style="color: #e65100;">🔥 My Active Deliveries</h2>
+    <div class="food-grid">
+        {% for d in my_active %}
+        <div class="food-card"
+            style="border: 2px solid {% if d.delivery_status == 'in_transit' %}#9C27B0{% else %}#FF9800{% endif %};">
+            <div class="food-card-header">
+                <span class="food-type-badge {{ d.food_type }}">
+                    {{ '🥬 VEG' if d.food_type == 'veg' else '🍗 NON-VEG' if d.food_type == 'nonveg' else '🌱 VEGAN' }}
+                </span>
+                <span class="status-badge"
+                    style="background: {% if d.delivery_status == 'in_transit' %}#9C27B0{% else %}#FF9800{% endif %};">
+                    {% if d.delivery_status == 'assigned' %}📋 PICKUP{% elif d.delivery_status == 'in_transit' %}🚴 ON
+                    THE WAY{% else %}{{ d.delivery_status|upper }}{% endif %}
+                </span>
+            </div>
+            <h3>{{ d.food_name }}</h3>
+            <div class="food-card-details">
+                <p>📦 {{ d.quantity }}</p>
+
+                {% if d.delivery_status == 'assigned' %}
+                <!-- PICKUP FROM DONOR -->
+                <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 10px 0;">
+                    <p style="font-weight: 600; color: #1976d2; margin-bottom: 8px;">📍 Pickup From:</p>
+                    <p><strong>{{ d.donor.name }}</strong></p>
+                    <p>{{ d.address }}</p>
+                    <p>📞 {{ d.phone }}</p>
+                    {% if d.pickup_location %}
+                    <p><a href="https://www.google.com/maps/search/?api=1&query={{ d.pickup_location|urlencode }}"
+                            target="_blank" class="map-link">🗺️ Open in Maps</a></p>
+                    {% endif %}
+                </div>
+                <div style="background: #fff3e0; padding: 12px; border-radius: 8px; text-align: center;">
+                    <p style="font-weight: 600; color: #e65100;">Enter Donor's OTP to confirm pickup</p>
+                    <input type="text" id="pickupOtp{{ d.id }}" placeholder="Enter 4-digit OTP" maxlength="4"
+                        style="text-align: center; font-size: 1.5rem; width: 120px; padding: 10px; margin: 10px 0;">
+                    <br>
+                    <button onclick="verifyPickup({{ d.id }})" class="btn" style="background: #4CAF50;">✅ Confirm
+                        Pickup</button>
+                </div>
+
+                {% elif d.delivery_status == 'in_transit' %}
+                <!-- DELIVER TO RECEIVER -->
+                <div style="background: #f3e5f5; padding: 12px; border-radius: 8px; margin: 10px 0;">
+                    <p style="font-weight: 600; color: #7b1fa2; margin-bottom: 8px;">📍 Deliver To:</p>
+                    <p><strong>{{ d.claimer.org_name or d.claimer.name }}</strong></p>
+                    <p>{{ d.delivery_address }}</p>
+                    <p>📞 {{ d.claimer.phone }}</p>
+                </div>
+                <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; text-align: center;">
+                    <p style="font-weight: 600; color: #2e7d32;">Enter Receiver's OTP to complete delivery</p>
+                    <input type="text" id="deliverOtp{{ d.id }}" placeholder="Enter 4-digit OTP" maxlength="4"
+                        style="text-align: center; font-size: 1.5rem; width: 120px; padding: 10px; margin: 10px 0;">
+                    <br>
+                    <button onclick="completeDelivery({{ d.id }})" class="btn" style="background: #4CAF50;">✅ Complete
+                        Delivery</button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<!-- Available Deliveries -->
+<section class="card">
+    <h2>📦 Available Deliveries</h2>
+    <div class="food-grid">
+        {% for d in available %}
+        <div class="food-card">
+            <div class="food-card-header">
+                <span class="food-type-badge {{ d.food_type }}">
+                    {{ '🥬 VEG' if d.food_type == 'veg' else '🍗 NON-VEG' if d.food_type == 'nonveg' else '🌱 VEGAN' }}
+                </span>
+                <span class="urgency-badge {{ d.urgency }}">
+                    {{ '🔴 URGENT' if d.urgency == 'high' else '🟡 MEDIUM' if d.urgency == 'medium' else '🟢 LOW' }}
+                </span>
+            </div>
+            <h3>{{ d.food_name }}</h3>
+            <div class="food-card-details">
+                <p>📦 {{ d.quantity }}</p>
+                <div style="background: #e3f2fd; padding: 10px; border-radius: 6px; margin: 8px 0;">
+                    <p><strong>🏪 From:</strong> {{ d.donor.name }}</p>
+                    <p style="font-size: 0.9rem;">{{ d.address[:40] }}...</p>
+                </div>
+                <div style="background: #e8f5e9; padding: 10px; border-radius: 6px; margin: 8px 0;">
+                    <p><strong>🏢 To:</strong> {{ d.claimer.org_name or d.claimer.name if d.claimer else 'N/A' }}</p>
+                    <p style="font-size: 0.9rem;">{{ d.delivery_address[:40] if d.delivery_address else '' }}...</p>
+                </div>
+            </div>
+            <button onclick="acceptDelivery({{ d.id }})" class="btn btn-full"
+                style="background: linear-gradient(135deg, #4CAF50, #66BB6A);">
+                🚴 Accept This Delivery
+            </button>
+        </div>
+        {% else %}
+        <p class="empty-state">No deliveries available right now. Check back soon!</p>
+        {% endfor %}
+    </div>
+</section>
+
+<!-- Completed Deliveries -->
+{% if my_completed %}
+<section class="card">
+    <h2>✅ Recent Completed</h2>
+    <div class="donations-list">
+        {% for d in my_completed %}
+        <div class="donation-item completed">
+            <div class="donation-header">
+                <span class="food-type-badge {{ d.food_type }}">
+                    {{ '🥬' if d.food_type == 'veg' else '🍗' if d.food_type == 'nonveg' else '🌱' }}
+                </span>
+                <h4>{{ d.food_name }}</h4>
+                <span class="status-badge completed">✅ DELIVERED</span>
+            </div>
+            <p>Delivered {{ d.delivered_at.strftime('%b %d, %H:%M') if d.delivered_at else '' }}</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function toggleNotifications() {
+        const panel = document.getElementById('notificationPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function markAllRead() {
+        fetch('/api/notifications/read', { method: 'POST' })
+            .then(() => location.reload());
+    }
+
+    function acceptDelivery(donationId) {
+        fetch(`/delivery/accept/${donationId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Delivery accepted! Go pick up the food.', 'success');
+                    location.reload();
+                } else {
+                    showToast(data.message || 'Failed to accept', 'error');
+                }
+            });
+    }
+
+    function verifyPickup(donationId) {
+        const otp = document.getElementById(`pickupOtp${donationId}`).value;
+        if (!otp || otp.length !== 4) {
+            showToast('Please enter a valid 4-digit OTP', 'error');
+            return;
+        }
+
+        fetch(`/delivery/pickup/${donationId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ otp: otp })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Pickup confirmed! Now deliver to the receiver.', 'success');
+                    location.reload();
+                } else {
+                    showToast(data.message || 'Invalid OTP', 'error');
+                }
+            });
+    }
+
+    function completeDelivery(donationId) {
+        const otp = document.getElementById(`deliverOtp${donationId}`).value;
+        if (!otp || otp.length !== 4) {
+            showToast('Please enter a valid 4-digit OTP', 'error');
+            return;
+        }
+
+        fetch(`/delivery/complete/${donationId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ otp: otp })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('🎉 Delivery completed! Great job!', 'success');
+                    location.reload();
+                } else {
+                    showToast(data.message || 'Invalid OTP', 'error');
+                }
+            });
+    }
+</script>
+{% endblock %}

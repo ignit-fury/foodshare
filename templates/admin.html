@@ -1,0 +1,676 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard - FoodShare{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1>Admin Dashboard 🛡️</h1>
+        <p>Manage users and monitor platform activity.</p>
+    </div>
+</div>
+
+<div class="stats-grid stats-grid-4">
+    <div class="stat-card stat-primary">
+        <div class="stat-icon">👥</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ stats.total_users }}</span>
+            <span class="stat-label">Total Users</span>
+        </div>
+    </div>
+    <div class="stat-card stat-warning">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ stats.pending_approvals }}</span>
+            <span class="stat-label">Pending Approvals</span>
+        </div>
+    </div>
+    <div class="stat-card stat-success">
+        <div class="stat-icon">📦</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ stats.total_donations }}</span>
+            <span class="stat-label">Total Donations</span>
+        </div>
+    </div>
+    <div class="stat-card stat-danger">
+        <div class="stat-icon">🚨</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ stats.unresolved_errors or 0 }}</span>
+            <span class="stat-label">Unresolved Errors</span>
+        </div>
+    </div>
+</div>
+
+<div class="admin-tabs">
+    <button class="tab-btn active" onclick="showSection('users')">👥 Users</button>
+    <button class="tab-btn" onclick="showSection('pending')">⏳ Pending Approvals</button>
+    <button class="tab-btn" onclick="showSection('donations')">📦 Donations</button>
+    <button class="tab-btn" onclick="showSection('errors')">🚨 Error Logs {% if stats.critical_errors %}<span
+            class="error-badge">{{ stats.critical_errors }}</span>{% endif %}</button>
+</div>
+
+<section id="usersSection" class="card">
+    <h2>All Users</h2>
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Registered</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr id="user-{{ user.id }}">
+                <td>
+                    <strong>{{ user.name }}</strong>
+                    {% if user.org_name %}<br><small>{{ user.org_name }}</small>{% endif %}
+                </td>
+                <td>{{ user.email }}</td>
+                <td><span class="role-badge {{ user.role }}">{{ user.role|upper }}</span></td>
+                <td><span class="status-badge {{ user.status }}" id="status-{{ user.id }}">{{ user.status|upper
+                        }}</span></td>
+                <td>{{ user.created_at.strftime('%b %d, %Y') }}</td>
+                <td>
+                    {% if user.status == 'pending' %}
+                    <button onclick="updateStatus('{{ user.id }}', 'approved')"
+                        class="btn btn-small btn-success">Approve</button>
+                    <button onclick="updateStatus('{{ user.id }}', 'rejected')"
+                        class="btn btn-small btn-danger">Reject</button>
+                    {% elif user.status == 'approved' %}
+                    <button onclick="updateStatus('{{ user.id }}', 'banned')"
+                        class="btn btn-small btn-danger">Ban</button>
+                    {% elif user.status == 'banned' %}
+                    <button onclick="updateStatus('{{ user.id }}', 'approved')"
+                        class="btn btn-small btn-success">Unban</button>
+                    <button onclick="deleteUser('{{ user.id }}')" class="btn btn-small btn-danger">Delete</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" class="empty-state">No users found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section id="pendingSection" class="card" style="display: none;">
+    <h2>Pending Approvals</h2>
+    <div class="pending-list">
+        {% for user in users if user.status == 'pending' %}
+        <div class="pending-card" id="pending-{{ user.id }}">
+            <div class="pending-header">
+                <h3>{{ user.name }}</h3>
+                <span class="role-badge {{ user.role }}">{{ user.role|upper }}</span>
+            </div>
+            <div class="pending-details">
+                <p><strong>Organization:</strong> {{ user.org_name or 'N/A' }}</p>
+                <p><strong>Email:</strong> {{ user.email }}</p>
+                <p><strong>Phone:</strong> {{ user.phone }}</p>
+                <p><strong>Address:</strong> {{ user.address }}</p>
+                {% if user.govt_proof %}<p><strong>NGO Reg #:</strong> {{ user.govt_proof }}</p>{% endif %}
+                {% if user.aadhar_number %}<p><strong>Aadhar:</strong> {{ user.aadhar_number[:4] }}****{{
+                    user.aadhar_number[-4:] }}</p>{% endif %}
+            </div>
+            <div class="pending-actions">
+                <button onclick="updateStatus('{{ user.id }}', 'approved')" class="btn btn-success">✓ Approve</button>
+                <button onclick="updateStatus('{{ user.id }}', 'rejected')" class="btn btn-danger">✗ Reject</button>
+            </div>
+        </div>
+        {% else %}
+        <p class="empty-state">No pending approvals</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section id="donationsSection" class="card" style="display: none;">
+    <div class="section-header">
+        <h2>All Donations</h2>
+        <div class="section-actions">
+            <a href="{{ url_for('export_donations') }}" class="btn btn-small btn-secondary">📥 Export CSV</a>
+            <button onclick="deleteAllDonations()" class="btn btn-small btn-danger">🗑️ Delete All</button>
+        </div>
+    </div>
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Food</th>
+                <th>Donor</th>
+                <th>Quantity</th>
+                <th>Status</th>
+                <th>Claimed By</th>
+                <th>OTP</th>
+                <th>Posted</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in donations %}
+            <tr>
+                <td>
+                    <strong>{{ d.food_name }}</strong>
+                    <br><span class="food-type-badge {{ d.food_type }}">{{ d.food_type }}</span>
+                </td>
+                <td>{{ d.donor.name }}</td>
+                <td>{{ d.quantity }}</td>
+                <td><span class="status-badge {{ d.status }}">{{ d.status|upper }}</span></td>
+                <td>
+                    {% if d.claimer %}
+                    {{ d.claimer.org_name or d.claimer.name }}
+                    <br><small>{{ d.claimed_at.strftime('%b %d, %H:%M') if d.claimed_at }}</small>
+                    {% else %}
+                    <span class="text-muted">-</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if d.otp %}
+                    <span class="otp-code" style="font-weight: bold; color: #4CAF50;">{{ d.otp }}</span>
+                    {% else %}
+                    <span class="text-muted">-</span>
+                    {% endif %}
+                </td>
+                <td>{{ d.created_at.strftime('%b %d, %H:%M') }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="empty-state">No donations found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+
+<section id="errorsSection" class="card" style="display: none;">
+    <div class="section-header">
+        <h2>🚨 Error Logs</h2>
+        <div class="section-actions">
+            <a href="{{ url_for('export_errors') }}" class="btn btn-small btn-secondary">📥 Export CSV</a>
+        </div>
+        <div class="error-stats">
+            <span class="error-stat"><strong>Today:</strong> {{ stats.errors_today or 0 }}</span>
+            <span class="error-stat"><strong>Total:</strong> {{ stats.total_errors or 0 }}</span>
+            <span class="error-stat critical"><strong>Critical:</strong> {{ stats.critical_errors or 0 }}</span>
+        </div>
+    </div>
+
+    <div class="error-filters">
+        <select id="severityFilter" onchange="filterErrors()">
+            <option value="">All Severities</option>
+            <option value="critical">🔴 Critical</option>
+            <option value="error">🟠 Error</option>
+            <option value="warning">🟡 Warning</option>
+        </select>
+        <select id="statusFilter" onchange="filterErrors()">
+            <option value="">All Statuses</option>
+            <option value="new">New</option>
+            <option value="acknowledged">Acknowledged</option>
+            <option value="resolved">Resolved</option>
+        </select>
+    </div>
+
+    <table class="admin-table error-table">
+        <thead>
+            <tr>
+                <th>Severity</th>
+                <th>Error Type</th>
+                <th>Message</th>
+                <th>Endpoint</th>
+                <th>Status</th>
+                <th>Time</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="errorTableBody">
+            {% for e in error_logs %}
+            <tr class="error-row" data-severity="{{ e.severity }}" data-status="{{ e.status }}" id="error-{{ e.id }}">
+                <td>
+                    <span class="severity-badge {{ e.severity }}">
+                        {% if e.severity == 'critical' %}🔴{% elif e.severity == 'error' %}🟠{% else %}🟡{% endif %}
+                        {{ e.severity|upper }}
+                    </span>
+                </td>
+                <td><code>{{ e.error_type }}</code></td>
+                <td class="error-message" title="{{ e.error_message }}">{{ e.error_message[:60] }}{% if
+                    e.error_message|length > 60 %}...{% endif %}</td>
+                <td><code>{{ e.endpoint or '-' }}</code></td>
+                <td>
+                    <span class="error-status-badge {{ e.status }}">{{ e.status|upper }}</span>
+                </td>
+                <td>{{ e.created_at.strftime('%b %d, %H:%M') }}</td>
+                <td class="error-actions">
+                    {% if e.status == 'new' %}
+                    <button onclick="acknowledgeError('{{ e.id }}')" class="btn btn-small btn-primary"
+                        title="Acknowledge">👁️</button>
+                    {% endif %}
+                    {% if e.status != 'resolved' %}
+                    <button onclick="resolveError('{{ e.id }}')" class="btn btn-small btn-success"
+                        title="Resolve">✓</button>
+                    {% endif %}
+                    <button onclick="viewErrorDetails('{{ e.id }}')" class="btn btn-small btn-secondary"
+                        title="Details">📋</button>
+                    <button onclick="deleteError('{{ e.id }}')" class="btn btn-small btn-danger"
+                        title="Delete">🗑️</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="empty-state">No errors logged 🎉</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+
+<div id="errorModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Error Details</h3>
+            <button onclick="closeErrorModal()" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body" id="errorModalBody">
+
+        </div>
+    </div>
+</div>
+
+<style>
+    .error-badge {
+        background: #ff4757;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 0.75rem;
+        margin-left: 8px;
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .error-stats {
+        display: flex;
+        gap: 1.5rem;
+    }
+
+    .error-stat {
+        font-size: 0.9rem;
+        color: var(--color-text-secondary, #888);
+    }
+
+    .error-stat.critical {
+        color: #ff4757;
+    }
+
+    .error-filters {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .error-filters select {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        border: 1px solid var(--color-border, #333);
+        background: var(--color-card-bg, #1a1a2e);
+        color: var(--color-text, #fff);
+        cursor: pointer;
+    }
+
+    .severity-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .severity-badge.critical {
+        background: rgba(255, 71, 87, 0.2);
+        color: #ff4757;
+        border: 1px solid rgba(255, 71, 87, 0.3);
+    }
+
+    .severity-badge.error {
+        background: rgba(255, 165, 2, 0.2);
+        color: #ffa502;
+        border: 1px solid rgba(255, 165, 2, 0.3);
+    }
+
+    .severity-badge.warning {
+        background: rgba(255, 234, 0, 0.2);
+        color: #f1c40f;
+        border: 1px solid rgba(255, 234, 0, 0.3);
+    }
+
+    .error-status-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .error-status-badge.new {
+        background: rgba(255, 71, 87, 0.2);
+        color: #ff4757;
+    }
+
+    .error-status-badge.acknowledged {
+        background: rgba(52, 152, 219, 0.2);
+        color: #3498db;
+    }
+
+    .error-status-badge.resolved {
+        background: rgba(46, 204, 113, 0.2);
+        color: #2ecc71;
+    }
+
+    .error-message {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .error-table code {
+        font-size: 0.8rem;
+        background: rgba(0, 0, 0, 0.2);
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+
+    .error-actions {
+        display: flex;
+        gap: 4px;
+    }
+
+    /* Modal Styles */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: var(--color-card-bg, #1a1a2e);
+        border-radius: 16px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        border-bottom: 1px solid var(--color-border, #333);
+    }
+
+    .modal-header h3 {
+        margin: 0;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--color-text, #fff);
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+        max-height: 60vh;
+    }
+
+    .error-detail-item {
+        margin-bottom: 1rem;
+    }
+
+    .error-detail-item label {
+        display: block;
+        font-weight: 600;
+        color: var(--color-text-secondary, #888);
+        margin-bottom: 0.25rem;
+        font-size: 0.85rem;
+    }
+
+    .error-detail-item pre {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-size: 0.8rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .stat-card.stat-danger {
+        border-left: 4px solid #ff4757;
+    }
+
+    .stat-card.stat-danger .stat-icon {
+        color: #ff4757;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="errorDataJson">{{ error_data_json|safe }}</script>
+<script>
+    const errorData = JSON.parse(document.getElementById('errorDataJson').textContent || '{}');
+
+    function showSection(section) {
+        document.querySelectorAll('.admin-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+
+        document.getElementById('usersSection').style.display = section === 'users' ? 'block' : 'none';
+        document.getElementById('pendingSection').style.display = section === 'pending' ? 'block' : 'none';
+        document.getElementById('donationsSection').style.display = section === 'donations' ? 'block' : 'none';
+        document.getElementById('errorsSection').style.display = section === 'errors' ? 'block' : 'none';
+    }
+
+    function updateStatus(userId, status) {
+        fetch(`/admin/user/${userId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`User ${status} successfully!`, 'success');
+                    location.reload();
+                } else {
+                    showToast('Failed to update user status', 'error');
+                }
+            });
+    }
+
+    function deleteUser(userId) {
+        if (!confirm('Are you sure you want to permanently delete this user? This cannot be undone.')) return;
+
+        fetch(`/admin/user/${userId}/delete`, {
+            method: 'DELETE'
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('User deleted successfully!', 'success');
+                    location.reload();
+                } else {
+                    showToast('Failed to delete user', 'error');
+                }
+            });
+    }
+
+    function filterErrors() {
+        const severity = document.getElementById('severityFilter').value;
+        const status = document.getElementById('statusFilter').value;
+
+        document.querySelectorAll('.error-row').forEach(row => {
+            const matchSeverity = !severity || row.dataset.severity === severity;
+            const matchStatus = !status || row.dataset.status === status;
+            row.style.display = matchSeverity && matchStatus ? '' : 'none';
+        });
+    }
+
+    function acknowledgeError(errorId) {
+        fetch(`/admin/errors/${errorId}/acknowledge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Error acknowledged', 'success');
+                    location.reload();
+                } else {
+                    showToast('Failed to acknowledge error', 'error');
+                }
+            });
+    }
+
+    function resolveError(errorId) {
+        const notes = prompt('Add resolution notes (optional):');
+
+        fetch(`/admin/errors/${errorId}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes: notes || '' })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Error resolved!', 'success');
+                    location.reload();
+                } else {
+                    showToast('Failed to resolve error', 'error');
+                }
+            });
+    }
+
+    function deleteError(errorId) {
+        if (!confirm('Delete this error log permanently?')) return;
+
+        fetch(`/admin/errors/${errorId}/delete`, {
+            method: 'DELETE'
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Error deleted', 'success');
+                    document.getElementById(`error-${errorId}`).remove();
+                } else {
+                    showToast('Failed to delete error', 'error');
+                }
+            });
+    }
+
+    function viewErrorDetails(errorId) {
+        const error = errorData[errorId];
+        if (!error) return;
+
+        const modalBody = document.getElementById('errorModalBody');
+        modalBody.innerHTML = `
+            <div class="error-detail-item">
+                <label>Error Type</label>
+                <p><code>${error.error_type}</code></p>
+            </div>
+            <div class="error-detail-item">
+                <label>Message</label>
+                <p>${error.error_message}</p>
+            </div>
+            <div class="error-detail-item">
+                <label>Endpoint</label>
+                <p><code>${error.method} ${error.endpoint}</code></p>
+            </div>
+            <div class="error-detail-item">
+                <label>Severity / Status</label>
+                <p><span class="severity-badge ${error.severity}">${error.severity.toUpperCase()}</span> 
+                   <span class="error-status-badge ${error.status}">${error.status.toUpperCase()}</span></p>
+            </div>
+            <div class="error-detail-item">
+                <label>User</label>
+                <p>${error.user}</p>
+            </div>
+            <div class="error-detail-item">
+                <label>IP Address</label>
+                <p>${error.ip_address}</p>
+            </div>
+            <div class="error-detail-item">
+                <label>Time</label>
+                <p>${error.created_at}</p>
+            </div>
+            <div class="error-detail-item">
+                <label>Traceback</label>
+                <pre>${error.traceback}</pre>
+            </div>
+            ${error.notes ? `<div class="error-detail-item"><label>Resolution Notes</label><p>${error.notes}</p></div>` : ''}
+        `;
+
+        document.getElementById('errorModal').style.display = 'flex';
+    }
+
+    function closeErrorModal() {
+        document.getElementById('errorModal').style.display = 'none';
+    }
+
+    document.getElementById('errorModal').addEventListener('click', function (e) {
+        if (e.target === this) closeErrorModal();
+    });
+
+    function deleteAllDonations() {
+        if (!confirm('Are you ABSOLUTELY sure? This will permanently delete ALL donations and ratings. This action cannot be undone.')) return;
+
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Deleting...';
+        btn.disabled = true;
+
+        fetch('/admin/donations/delete_all', {
+            method: 'POST'
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('All donations deleted successfully', 'success');
+                    location.reload();
+                } else {
+                    showToast('Failed to delete donations: ' + (data.message || 'Unknown error'), 'error');
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast('Network error occurred', 'error');
+                btn.textContent = originalText;
+                btn.disabled = false;
+            });
+    }
+</script>
+{% endblock %}

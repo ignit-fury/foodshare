@@ -1,0 +1,608 @@
+{% extends "base.html" %}
+{% block title %}Marketplace - FoodShare{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1>Food Marketplace 🍽️</h1>
+        <p>Browse and claim available food donations in your area.</p>
+    </div>
+    <div class="notification-bell" onclick="toggleNotifications()">
+        🔔 <span id="notifCount" class="badge" {% if unread_count==0 %}style="display:none" {% endif %}>{{ unread_count
+            }}</span>
+    </div>
+</div>
+
+<div id="notificationPanel" class="notification-panel" style="display: none;">
+    <div class="notif-header">
+        <h3>Notifications</h3>
+        <button onclick="markAllRead()" class="btn-small">Mark all read</button>
+    </div>
+    <div id="notifList">
+        {% for n in notifications %}
+        <div class="notif-item {{ '' if n.read else 'unread' }}">
+            <p>{{ n.message }}</p>
+            <span class="notif-time">{{ n.created_at.strftime('%b %d, %H:%M') }}</span>
+        </div>
+        {% else %}
+        <p class="empty-notif">No notifications yet</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon">📦</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ available|length }}</span>
+            <span class="stat-label">Available Now</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">🎯</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ my_claims|selectattr('status', 'equalto', 'claimed')|list|length }}</span>
+            <span class="stat-label">My Claims</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ my_claims|selectattr('status', 'equalto', 'completed')|list|length }}</span>
+            <span class="stat-label">Completed</span>
+        </div>
+    </div>
+</div>
+
+<section class="card filter-section">
+    <h3>🔍 Filter Options</h3>
+    <div class="filter-grid">
+        <div class="form-group">
+            <label>Donation Type</label>
+            <select id="filterDonationType" onchange="applyFilters()">
+                <option value="all">All Donations</option>
+                <option value="immediate">⚡ Available Now</option>
+                <option value="scheduled">🌙 Scheduled (Next-Day)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Food Type</label>
+            <select id="filterType" onchange="applyFilters()">
+                <option value="all">All Types</option>
+                <option value="veg">🥬 Vegetarian</option>
+                <option value="nonveg">🍗 Non-Vegetarian</option>
+                <option value="vegan">🌱 Vegan</option>
+                <option value="jain">🙏 Jain</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Category</label>
+            <select id="filterCategory" onchange="applyFilters()">
+                <option value="all">All Categories</option>
+                <option value="cooked">🍲 Cooked Meal</option>
+                <option value="raw">🥕 Raw Ingredients</option>
+                <option value="packaged">📦 Packed Food</option>
+                <option value="fruits">🍎 Fruits</option>
+                <option value="bakery">🥖 Bakery Items</option>
+                <option value="beverages">🥤 Beverages</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Urgency</label>
+            <select id="filterUrgency" onchange="applyFilters()">
+                <option value="all">All</option>
+                <option value="high">🔴 High (2 hrs)</option>
+                <option value="medium">🟡 Medium (6 hrs)</option>
+                <option value="low">🟢 Low (12 hrs)</option>
+            </select>
+        </div>
+
+    </div>
+</section>
+
+<div class="view-tabs">
+    <button class="tab-btn active" onclick="switchView('available', this)">Available Food</button>
+    <button class="tab-btn" onclick="switchView('myClaims', this)">My Claims</button>
+</div>
+
+<div id="availableView">
+    <h2 class="section-title">🍽️ Available Donations</h2>
+    <div id="foodList" class="food-grid">
+        {% for d in available %}
+        <div class="food-card {% if d.donation_type == 'scheduled' %}scheduled-card{% endif %}"
+            data-type="{{ d.food_type }}" data-urgency="{{ d.urgency }}" data-category="{{ d.food_category }}"
+            data-name="{{ d.food_name|lower }}" data-donation-type="{{ d.donation_type or 'immediate' }}" {% if
+            d.donation_type=='scheduled'
+            %}style="border: 2px solid #3949ab; background: linear-gradient(135deg, #f5f5f5, #e8eaf6);" {% endif %}>
+            <div class="food-card-header">
+                <span class="food-type-badge {{ d.food_type }}">
+                    {{ '🥬 VEG' if d.food_type == 'veg' else '🍗 NON-VEG' if d.food_type == 'nonveg' else '🌱 VEGAN' }}
+                </span>
+                {% if d.donation_type == 'scheduled' %}
+                <span class="scheduled-badge"
+                    style="background: linear-gradient(135deg, #1a237e, #3949ab); color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
+                    🌙 SCHEDULED
+                </span>
+                {% else %}
+                <span class="urgency-badge {{ d.urgency }}">
+                    {{ '🔴 URGENT' if d.urgency == 'high' else '🟡 MEDIUM' if d.urgency == 'medium' else '🟢 LOW' }}
+                </span>
+                {% endif %}
+            </div>
+            <h3>{{ d.food_name }}</h3>
+            <div class="food-card-details">
+                <p>📦 {{ d.quantity }}</p>
+                <p>📍 {{ d.address[:50] }}...</p>
+                {% if d.pickup_location %}
+                <p>🗺️ <a href="https://www.google.com/maps/search/?api=1&query={{ d.pickup_location|urlencode }}"
+                        target="_blank" class="map-link">View on Google Maps</a></p>
+                {% endif %}
+
+                {% if d.donation_type == 'scheduled' %}
+                <!-- Scheduled Donation Details -->
+                <div
+                    style="background: linear-gradient(135deg, #1a237e, #283593); color: white; padding: 12px; border-radius: 8px; margin: 10px 0;">
+                    <p style="margin: 0 0 6px 0; font-weight: 600;">📅 Pickup: {{ d.scheduled_date.strftime('%b %d, %Y')
+                        if d.scheduled_date else 'Tomorrow' }}</p>
+                    <p style="margin: 0 0 6px 0;">⏰ Window: {{ d.pickup_window_start or '09:00' }} - {{
+                        d.pickup_window_end or '11:00' }}</p>
+                    <p style="margin: 0 0 6px 0;">
+                        {% if d.storage_method == 'frozen' %}❄️{% elif d.storage_method == 'refrigerated' %}🧊{% else
+                        %}🌡️{% endif %}
+                        {{ (d.storage_method or 'refrigerated') | replace('_', ' ') | title }}
+                    </p>
+                    {% if d.intended_meal %}
+                    <p style="margin: 0;">🍽️ Best for: {{ d.intended_meal | title }}</p>
+                    {% endif %}
+                </div>
+                {% if d.storage_instructions %}
+                <p style="font-size: 0.85rem; color: #666; margin-top: 8px;">
+                    <strong>🔥 Reheating:</strong> {{ d.storage_instructions }}
+                </p>
+                {% endif %}
+                {% else %}
+                <p>⏰ Best before: {{ d.expiry.strftime('%b %d, %H:%M') }}</p>
+                {% endif %}
+            </div>
+            <div class="food-card-footer">
+                <span class="category-tag">{{ d.food_category }}</span>
+                <span class="time-ago">{{ d.created_at.strftime('%b %d') }}</span>
+            </div>
+            {% if d.donation_type == 'scheduled' %}
+            <button class="btn btn-full" onclick="claimFood('{{ d.id }}')"
+                style="background: linear-gradient(135deg, #1a237e, #3949ab);">📋 Reserve This Food</button>
+            {% else %}
+            <button class="btn btn-full" onclick="claimFood('{{ d.id }}')">Claim This Food</button>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="empty-state">No food available right now. Check back soon!</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div id="myClaimsView" style="display: none;">
+    <h2 class="section-title">📋 My Claimed Items</h2>
+    <div class="food-grid">
+        {% for d in my_claims %}
+        <div class="food-card {{ d.status }}">
+            <div class="food-card-header">
+                <span class="food-type-badge {{ d.food_type }}">
+                    {{ '🥬 VEG' if d.food_type == 'veg' else '🍗 NON-VEG' if d.food_type == 'nonveg' else '🌱 VEGAN' }}
+                </span>
+                <span class="status-badge {{ d.status }}">{{ d.status|upper }}</span>
+            </div>
+            <h3>{{ d.food_name }}</h3>
+            <div class="food-card-details">
+                <p>📦 {{ d.quantity }}</p>
+                <p>📍 {{ d.address }}</p>
+                {% if d.pickup_location %}
+                <p>🗺️ <a href="https://www.google.com/maps/search/?api=1&query={{ d.pickup_location|urlencode }}"
+                        target="_blank" class="map-link">View on Google Maps</a></p>
+                {% endif %}
+                <div
+                    style="margin-top: 12px; padding: 12px; background-color: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px;">
+                    <p style="margin: 0 0 8px 0; font-weight: 600; color: #2e7d32;">👤 Donor Contact Information:</p>
+                    <p style="margin: 4px 0;"><strong>Name:</strong> {{ d.donor.name }}</p>
+                    {% if d.donor.org_name %}
+                    <p style="margin: 4px 0;"><strong>Organization:</strong> {{ d.donor.org_name }}</p>
+                    {% endif %}
+                    <p style="margin: 4px 0;"><strong>Phone:</strong> {{ d.phone }}</p>
+                    <p style="margin: 4px 0;"><strong>Email:</strong> {{ d.donor.email }}</p>
+                </div>
+            </div>
+            {% if d.status == 'claimed' %}
+            {% if d.delivery_method == 'foodshare_delivery' %}
+            <!-- DELIVERY STATUS TRACKER -->
+            <div
+                style="margin-top: 15px; padding: 15px; background: linear-gradient(135deg, #e3f2fd, #bbdefb); border-radius: 12px; border: 2px solid #2196f3;">
+                <h4 style="margin: 0 0 12px 0; color: #1565c0;">🚚 Delivery Status</h4>
+
+                <!-- Status Progress Bar -->
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; position: relative;">
+                    <div
+                        style="position: absolute; top: 50%; left: 0; right: 0; height: 4px; background: #e0e0e0; z-index: 1;">
+                    </div>
+                    <div
+                        style="position: absolute; top: 50%; left: 0; height: 4px; background: #4CAF50; z-index: 2; transition: width 0.3s;
+                        width: {% if d.delivery_status == 'pending' %}0%{% elif d.delivery_status == 'assigned' %}33%{% elif d.delivery_status == 'in_transit' %}66%{% elif d.delivery_status == 'delivered' %}100%{% else %}0%{% endif %};">
+                    </div>
+
+                    <div style="z-index: 3; text-align: center;">
+                        <div
+                            style="width: 30px; height: 30px; border-radius: 50%; background: {% if d.delivery_status in ['pending', 'assigned', 'in_transit', 'delivered'] %}#4CAF50{% else %}#e0e0e0{% endif %}; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px;">
+                            🟡</div>
+                        <small>Pending</small>
+                    </div>
+                    <div style="z-index: 3; text-align: center;">
+                        <div
+                            style="width: 30px; height: 30px; border-radius: 50%; background: {% if d.delivery_status in ['assigned', 'in_transit', 'delivered'] %}#4CAF50{% else %}#e0e0e0{% endif %}; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px;">
+                            🔵</div>
+                        <small>Assigned</small>
+                    </div>
+                    <div style="z-index: 3; text-align: center;">
+                        <div
+                            style="width: 30px; height: 30px; border-radius: 50%; background: {% if d.delivery_status in ['in_transit', 'delivered'] %}#4CAF50{% else %}#e0e0e0{% endif %}; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px;">
+                            🚴</div>
+                        <small>On Way</small>
+                    </div>
+                    <div style="z-index: 3; text-align: center;">
+                        <div
+                            style="width: 30px; height: 30px; border-radius: 50%; background: {% if d.delivery_status == 'delivered' %}#4CAF50{% else %}#e0e0e0{% endif %}; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px;">
+                            ✅</div>
+                        <small>Delivered</small>
+                    </div>
+                </div>
+
+                <!-- Status Message -->
+                <div
+                    style="text-align: center; padding: 10px; border-radius: 8px; margin-bottom: 10px;
+                    background: {% if d.delivery_status == 'pending' %}#fff3e0{% elif d.delivery_status == 'assigned' %}#e3f2fd{% elif d.delivery_status == 'in_transit' %}#f3e5f5{% else %}#e8f5e9{% endif %};">
+                    {% if d.delivery_status == 'pending' %}
+                    <span style="font-size: 1.2rem;">🟡</span> <strong>Waiting for a delivery partner...</strong>
+                    {% elif d.delivery_status == 'assigned' %}
+                    <span style="font-size: 1.2rem;">🔵</span> <strong>Driver assigned! Pickup in progress...</strong>
+                    {% elif d.delivery_status == 'in_transit' %}
+                    <span style="font-size: 1.2rem;">🚴</span> <strong>Your food is on the way!</strong>
+                    {% elif d.delivery_status == 'delivered' %}
+                    <span style="font-size: 1.2rem;">✅</span> <strong>Delivered!</strong>
+                    {% endif %}
+                </div>
+
+                <!-- Driver Info (if assigned) -->
+                {% if d.delivery_partner and d.delivery_status in ['assigned', 'in_transit'] %}
+                <div
+                    style="background: white; padding: 10px; border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+                    <div
+                        style="width: 40px; height: 40px; background: #4CAF50; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">
+                        🚴</div>
+                    <div>
+                        <p style="margin: 0; font-weight: 600;">{{ d.delivery_partner.name }}</p>
+                        <p style="margin: 0; font-size: 0.9rem; color: #666;">📞 {{ d.delivery_partner.phone }}</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="otp-info" style="margin-top: 10px;">
+                <p><strong>Your OTP (for delivery partner):</strong></p>
+                <div class="otp-display-small">{{ d.otp }}</div>
+                <p class="otp-hint">Give this OTP to the delivery person when they arrive</p>
+            </div>
+            {% else %}
+            <!-- Self Pickup -->
+            <div class="otp-info">
+                <p><strong>Your OTP:</strong></p>
+                <div class="otp-display-small">{{ d.otp }}</div>
+                <p class="otp-hint">Show this to the donor during pickup</p>
+            </div>
+            {% endif %}
+            {% elif d.status == 'completed' %}
+            <div class="completed-info">
+                <p>✅ Pickup completed on {{ d.completed_at.strftime('%b %d, %H:%M') }}</p>
+                {% set has_rated = d.ratings|selectattr('receiver_id', 'equalto', current_user.id)|list|length > 0 %}
+                {% if not has_rated %}
+                <button onclick="openRatingModal('{{ d.id }}', '{{ d.donor_id }}')" class="btn btn-small"
+                    style="margin-top: 10px;">⭐ Rate Donor</button>
+                {% else %}
+                <p class="rated-info" style="color: #4caf50; font-weight: 600; margin-top: 10px;">✅ You rated this donor
+                </p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="empty-state">You haven't claimed any food yet.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div id="claimModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>🎉 Food Claimed Successfully!</h3>
+        <p>Show this OTP to the donor when you pick up the food:</p>
+        <div class="otp-display" id="claimOtp"></div>
+        <p class="otp-note">Please save this OTP. You will need it for verification.</p>
+        <div class="modal-actions">
+            <button onclick="closeClaimModal()" class="btn">Got it!</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delivery Choice Modal -->
+<div id="deliveryChoiceModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>🚚 Choose Delivery Method</h3>
+        <p>How would you like to receive this food?</p>
+
+        <div class="delivery-choice-cards">
+            <label class="choice-card">
+                <input type="radio" name="claimDelivery" value="pickup" checked>
+                <div class="choice-content">
+                    <span class="choice-icon">📦</span>
+                    <span class="choice-title">I'll Pick Up</span>
+                    <span class="choice-desc">Collect from donor location</span>
+                </div>
+            </label>
+
+            <label class="choice-card">
+                <input type="radio" name="claimDelivery" value="delivery">
+                <div class="choice-content">
+                    <span class="choice-icon">🚚</span>
+                    <span class="choice-title">Request Delivery</span>
+                    <span class="choice-desc">FoodShare delivers to you</span>
+                </div>
+            </label>
+        </div>
+
+        <div class="modal-actions">
+            <button onclick="confirmClaim()" class="btn">Confirm Claim</button>
+            <button onclick="closeDeliveryModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Claim Success Modal -->
+<div id="claimSuccessModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeClaimSuccessModal()">×</span>
+        <div id="claimSuccessContent"></div>
+        <div class="modal-actions">
+            <button onclick="closeClaimSuccessModal(); location.reload();" class="btn">OK</button>
+        </div>
+    </div>
+</div>
+
+<div id="ratingModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>⭐ Rate Your Experience</h3>
+        <p>How was your experience with this donor?</p>
+
+        <div class="star-rating" id="starRating">
+            <span class="star" data-rating="1">★</span>
+            <span class="star" data-rating="2">★</span>
+            <span class="star" data-rating="3">★</span>
+            <span class="star" data-rating="4">★</span>
+            <span class="star" data-rating="5">★</span>
+        </div>
+
+        <textarea id="feedbackText" placeholder="Share your feedback (optional)" rows="4"
+            style="width: 100%; padding: 10px; margin-top: 15px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+
+        <input type="hidden" id="ratingDonationId">
+        <input type="hidden" id="ratingDonorId">
+
+        <div class="modal-actions">
+            <button onclick="submitRating()" class="btn">Submit Rating</button>
+            <button onclick="closeRatingModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function toggleNotifications() {
+        const panel = document.getElementById('notificationPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function markAllRead() {
+        fetch('/api/notifications/read', { method: 'POST' })
+            .then(() => location.reload());
+    }
+
+    function switchView(view, btn) {
+        document.querySelectorAll('.view-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+
+        if (view === 'available') {
+            document.getElementById('availableView').style.display = 'block';
+            document.getElementById('myClaimsView').style.display = 'none';
+        } else {
+            document.getElementById('availableView').style.display = 'none';
+            document.getElementById('myClaimsView').style.display = 'block';
+        }
+    }
+
+    function applyFilters() {
+        const donationTypeFilter = document.getElementById('filterDonationType').value;
+        const typeFilter = document.getElementById('filterType').value;
+        const categoryFilter = document.getElementById('filterCategory').value;
+        const urgencyFilter = document.getElementById('filterUrgency').value;
+
+        document.querySelectorAll('#foodList .food-card').forEach(card => {
+            const matchDonationType = donationTypeFilter === 'all' || card.dataset.donationType === donationTypeFilter;
+            const matchType = typeFilter === 'all' || card.dataset.type === typeFilter;
+            const matchCategory = categoryFilter === 'all' || card.dataset.category === categoryFilter;
+            const matchUrgency = urgencyFilter === 'all' || card.dataset.urgency === urgencyFilter;
+
+            card.style.display = (matchDonationType && matchType && matchCategory && matchUrgency) ? 'block' : 'none';
+        });
+    }
+
+    let currentClaimDonation = null;
+
+    function claimFood(donationId) {
+        // Show delivery choice modal
+        currentClaimDonation = donationId;
+        document.getElementById('deliveryChoiceModal').style.display = 'flex';
+    }
+
+    function closeDeliveryModal() {
+        document.getElementById('deliveryChoiceModal').style.display = 'none';
+        currentClaimDonation = null;
+    }
+
+    function confirmClaim() {
+        const delivery_choice = document.querySelector('input[name="claimDelivery"]:checked').value;
+
+        fetch(`/receiver/claim/${currentClaimDonation}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ delivery_choice: delivery_choice })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    closeDeliveryModal();
+                    showClaimSuccess(data);
+                } else {
+                    showToast(data.message || 'Unable to claim', 'error');
+                }
+            });
+    }
+
+    function showClaimSuccess(data) {
+        const content = document.getElementById('claimSuccessContent');
+
+        if (data.delivery_choice === 'delivery') {
+            content.innerHTML = `
+                <h3>🚚 Delivery Requested!</h3>
+                <p>FoodShare will deliver this food to your location.</p>
+                
+                <div class="otp-section" style="background: #e3f2fd; padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+                    <h4 style="margin: 0 0 1rem 0;">Your OTP (for delivery person)</h4>
+                    <div class="otp-display">${data.receiver_otp}</div>
+                    <p class="otp-note" style="margin-top: 1rem;">Give this OTP to the delivery person when they arrive</p>
+                </div>
+                
+                <div style="background: #f5f5f5; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                    <p><strong>📍 Delivery to:</strong></p>
+                    <p>${data.delivery_address}</p>
+                    <p style="margin-top: 0.5rem;"><strong>Donor:</strong> ${data.donor_name}</p>
+                </div>
+            `;
+        } else {
+            content.innerHTML = `
+                <h3>📦 Food Claimed!</h3>
+                <p>Please pick up from donor's location.</p>
+                
+                <div class="otp-section" style="background: #e8f5e9; padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+                    <h4 style="margin: 0 0 1rem 0;">Your OTP</h4>
+                    <div class="otp-display">${data.otp}</div>
+                    <p class="otp-note" style="margin-top: 1rem;">Show this to the donor during pickup</p>
+                </div>
+                
+                <div style="background: #f5f5f5; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                    <p><strong>Donor:</strong> ${data.donor_name}</p>
+                    <p><strong>📍 Address:</strong> ${data.pickup_address}</p>
+                    ${data.pickup_location ? `<p><strong>🗺️ Location:</strong> <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.pickup_location)}" target="_blank">View on Map</a></p>` : ''}
+                    <p><strong>📞 Phone:</strong> ${data.donor_phone}</p>
+                </div>
+            `;
+        }
+
+        document.getElementById('claimSuccessModal').style.display = 'flex';
+    }
+
+    function closeClaimSuccessModal() {
+        document.getElementById('claimSuccessModal').style.display = 'none';
+    }
+
+    function closeClaimModal() {
+        document.getElementById('claimModal').style.display = 'none';
+        location.reload();
+    }
+
+    let selectedRating = 0;
+
+    function openRatingModal(donationId, donorId) {
+        document.getElementById('ratingDonationId').value = donationId;
+        document.getElementById('ratingDonorId').value = donorId;
+        document.getElementById('ratingModal').style.display = 'flex';
+        selectedRating = 0;
+        document.getElementById('feedbackText').value = '';
+        updateStars();
+    }
+
+    function closeRatingModal() {
+        document.getElementById('ratingModal').style.display = 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const stars = document.querySelectorAll('.star');
+        stars.forEach(star => {
+            star.addEventListener('click', function () {
+                selectedRating = parseInt(this.dataset.rating);
+                updateStars();
+            });
+            star.addEventListener('mouseover', function () {
+                const rating = parseInt(this.dataset.rating);
+                stars.forEach((s, idx) => {
+                    s.style.color = idx < rating ? '#FFD700' : '#ccc';
+                });
+            });
+        });
+
+        const starRating = document.getElementById('starRating');
+        if (starRating) {
+            starRating.addEventListener('mouseout', function () {
+                updateStars();
+            });
+        }
+    });
+
+    function updateStars() {
+        const stars = document.querySelectorAll('.star');
+        stars.forEach((s, idx) => {
+            s.style.color = idx < selectedRating ? '#FFD700' : '#ccc';
+        });
+    }
+
+    function submitRating() {
+        if (selectedRating === 0) {
+            showToast('Please select a rating', 'error');
+            return;
+        }
+
+        const donationId = document.getElementById('ratingDonationId').value;
+        const feedback = document.getElementById('feedbackText').value;
+
+        fetch('/api/rating/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                donation_id: parseInt(donationId),
+                rating: selectedRating,
+                feedback: feedback
+            })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Rating submitted successfully!', 'success');
+                    closeRatingModal();
+                    location.reload();
+                } else {
+                    showToast(data.message || 'Failed to submit rating', 'error');
+                }
+            })
+            .catch(err => {
+                showToast('Error submitting rating', 'error');
+                console.error(err);
+            });
+    }
+</script>
+{% endblock %}

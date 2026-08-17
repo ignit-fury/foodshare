@@ -1,0 +1,598 @@
+{% extends "base.html" %}
+{% block title %}Donor Dashboard - FoodShare{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1>Welcome, {{ current_user.name }}! 👋</h1>
+        <p>Share your surplus food and help reduce waste.</p>
+    </div>
+    <div class="notification-bell" onclick="toggleNotifications()">
+        🔔 <span id="notifCount" class="badge" {% if unread_count==0 %}style="display:none" {% endif %}>{{ unread_count
+            }}</span>
+    </div>
+</div>
+
+<div id="notificationPanel" class="notification-panel" style="display: none;">
+    <div class="notif-header">
+        <h3>Notifications</h3>
+        <button onclick="markAllRead()" class="btn-small">Mark all read</button>
+    </div>
+    <div id="notifList">
+        {% if notifications %}
+        {% for n in notifications %}
+        <div class="notif-item {{ '' if n.read else 'unread' }}" onclick="markNotifRead('{{ n.id }}')">
+            <p>{{ n.message }}</p>
+            <span class="notif-time">{{ n.created_at.strftime('%b %d, %H:%M') }}</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="empty-notif">No notifications yet</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon">📦</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ donations|length }}</span>
+            <span class="stat-label">Total Donations</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ donations|selectattr('status', 'equalto', 'claimed')|list|length }}</span>
+            <span class="stat-label">Items Claimed</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">🎯</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ donations|selectattr('status', 'equalto', 'completed')|list|length }}</span>
+            <span class="stat-label">Completed</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon">⭐</div>
+        <div class="stat-info">
+            <span class="stat-number">{{ '%.1f'|format(average_rating) if average_rating else 'N/A' }}</span>
+            <span class="stat-label">Average Rating</span>
+        </div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <section class="card">
+        <h2>📝 Post New Food Donation</h2>
+
+        <!-- Donation Type Toggle -->
+        <div class="donation-type-toggle" style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <button type="button" class="toggle-btn active" data-type="immediate"
+                onclick="setDonationType('immediate')">
+                ⚡ Immediate Pickup
+            </button>
+            <button type="button" class="toggle-btn" data-type="scheduled" onclick="setDonationType('scheduled')">
+                🌙 Schedule for Next Day
+            </button>
+        </div>
+
+        <form action="{{ url_for('post_donation') }}" method="POST" id="donationForm">
+            <input type="hidden" id="donationType" name="donationType" value="immediate">
+
+            <div class="form-group">
+                <label for="foodName">Food Item Name *</label>
+                <input type="text" id="foodName" name="foodName" placeholder="e.g., Vegetable Biryani" required>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="foodType">Food Type *</label>
+                    <select id="foodType" name="foodType" required>
+                        <option value="">Select Type</option>
+                        <option value="veg">🥬 Vegetarian</option>
+                        <option value="nonveg">🍗 Non-Vegetarian</option>
+                        <option value="vegan">🌱 Vegan</option>
+                        <option value="jain">🙏 Jain</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="foodCategory">Category *</label>
+                    <select id="foodCategory" name="foodCategory" required>
+                        <option value="">Select Category</option>
+                        <option value="cooked">🍲 Cooked Meal</option>
+                        <option value="raw">🥕 Raw Ingredients</option>
+                        <option value="packaged">📦 Packaged Food</option>
+                        <option value="fruits">🍎 Fruits</option>
+                        <option value="bakery">🥖 Bakery Items</option>
+                        <option value="beverages">🥤 Beverages</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="quantity">Quantity *</label>
+                    <input type="text" id="quantity" name="quantity" placeholder="e.g., serves 20 people" required>
+                </div>
+                <div class="form-group" id="urgencyGroup">
+                    <label for="urgency">Urgency Level *</label>
+                    <select id="urgency" name="urgency" required>
+                        <option value="">Select Urgency</option>
+                        <option value="high">🔴 High - 2 hours</option>
+                        <option value="medium">🟡 Medium - 6 hours</option>
+                        <option value="low">🟢 Low - 24 hours</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Immediate Pickup Fields -->
+            <div id="immediateFields">
+                <div class="form-group">
+                    <label for="safeFor">Safe for (hours) *</label>
+                    <input type="number" id="safeFor" name="safeFor" placeholder="e.g., 24" min="1">
+                </div>
+            </div>
+
+            <!-- Scheduled (Next-Day) Donation Fields -->
+            <div id="scheduledFields" style="display: none;">
+                <div class="scheduled-section"
+                    style="background: linear-gradient(135deg, #1a237e 0%, #283593 100%); padding: 20px; border-radius: 12px; margin: 15px 0; color: white;">
+                    <h3 style="margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
+                        🌙 Next-Day Pickup Details
+                    </h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="preparationTime" style="color: #b3e5fc;">Preparation Time (tonight) *</label>
+                            <input type="time" id="preparationTime" name="preparationTime" value="23:00"
+                                style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white;">
+                            <small style="color: #b3e5fc;">When food will be packaged</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduledDate" style="color: #b3e5fc;">Pickup Date *</label>
+                            <input type="date" id="scheduledDate" name="scheduledDate"
+                                style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white;">
+                            <small style="color: #b3e5fc;">When NGO can pick up</small>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="pickupWindowStart" style="color: #b3e5fc;">Pickup Window Start *</label>
+                            <input type="time" id="pickupWindowStart" name="pickupWindowStart" value="09:00"
+                                style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white;">
+                        </div>
+                        <div class="form-group">
+                            <label for="pickupWindowEnd" style="color: #b3e5fc;">Pickup Window End *</label>
+                            <input type="time" id="pickupWindowEnd" name="pickupWindowEnd" value="11:00"
+                                style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white;">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="color: #b3e5fc;">Storage Method *</label>
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 8px;">
+                            <label
+                                style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 15px; background: rgba(255,255,255,0.1); border-radius: 8px; border: 2px solid transparent;"
+                                class="storage-option">
+                                <input type="radio" name="storageMethod" value="room_temp"
+                                    style="width: 18px; height: 18px;">
+                                <span>🌡️ Room Temp</span>
+                            </label>
+                            <label
+                                style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 15px; background: rgba(255,255,255,0.1); border-radius: 8px; border: 2px solid transparent;"
+                                class="storage-option">
+                                <input type="radio" name="storageMethod" value="refrigerated" checked
+                                    style="width: 18px; height: 18px;">
+                                <span>🧊 Refrigerated</span>
+                            </label>
+                            <label
+                                style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 15px; background: rgba(255,255,255,0.1); border-radius: 8px; border: 2px solid transparent;"
+                                class="storage-option">
+                                <input type="radio" name="storageMethod" value="frozen"
+                                    style="width: 18px; height: 18px;">
+                                <span>❄️ Frozen</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="storageInstructions" style="color: #b3e5fc;">Reheating Instructions</label>
+                        <textarea id="storageInstructions" name="storageInstructions" rows="2"
+                            placeholder="e.g., Microwave for 3-4 minutes or steam until hot"
+                            style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white;"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="color: #b3e5fc;">Best For (Intended Meal)</label>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
+                            <label
+                                style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 8px 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                                <input type="radio" name="intendedMeal" value="breakfast"
+                                    style="width: 16px; height: 16px;">
+                                <span>🌅 Breakfast</span>
+                            </label>
+                            <label
+                                style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 8px 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                                <input type="radio" name="intendedMeal" value="lunch" checked
+                                    style="width: 16px; height: 16px;">
+                                <span>☀️ Lunch</span>
+                            </label>
+                            <label
+                                style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 8px 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                                <input type="radio" name="intendedMeal" value="dinner"
+                                    style="width: 16px; height: 16px;">
+                                <span>🌙 Dinner</span>
+                            </label>
+                            <label
+                                style="display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 8px 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                                <input type="radio" name="intendedMeal" value="any" style="width: 16px; height: 16px;">
+                                <span>🍽️ Any</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="address">Pickup Address *</label>
+                <textarea id="address" name="address" rows="2" placeholder="Enter complete address"
+                    required>{{ current_user.address or '' }}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="pickupLocation">Pickup Location (for Google Maps) *</label>
+                <input type="text" id="pickupLocation" name="pickupLocation" placeholder="e.g., MG Road, Bangalore"
+                    required>
+                <small class="help-text">This will be shown as a Google Maps link to receivers</small>
+            </div>
+
+            <div class="form-group">
+                <label for="phone">Contact Number *</label>
+                <input type="tel" id="phone" name="phone" value="{{ current_user.phone or '' }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="instructions">Special Instructions</label>
+                <textarea id="instructions" name="instructions" rows="2"
+                    placeholder="Any special handling instructions"></textarea>
+            </div>
+
+            <div class="form-group" style="margin-top: 20px;">
+                <label
+                    style="display: flex; align-items: flex-start; cursor: pointer; padding: 15px; border: 2px solid #ff9800; border-radius: 8px; background-color: #fff3e0;">
+                    <input type="checkbox" id="termsAccepted" name="termsAccepted" required
+                        style="margin-right: 12px; margin-top: 4px; width: 18px; height: 18px; cursor: pointer;">
+                    <span style="flex: 1; font-size: 14px; line-height: 1.5;">
+                        <strong style="color: #e65100;">⚠️ Terms & Conditions:</strong>
+                        I acknowledge that if anyone gets sick due to rotten or contaminated food provided by me, it is
+                        my sole responsibility and I accept that legal action might be taken against me. I ensure that
+                        the food I am donating is safe for consumption.
+                    </span>
+                </label>
+            </div>
+
+            <button type="submit" class="btn btn-full" id="submitBtn">🚀 Post Donation</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>📋 My Donations</h2>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="filterDonations('all')">All</button>
+            <button class="tab-btn" onclick="filterDonations('available')">Available</button>
+            <button class="tab-btn" onclick="filterDonations('claimed')">Claimed</button>
+            <button class="tab-btn" onclick="filterDonations('completed')">Completed</button>
+        </div>
+        <div id="myDonations" class="donations-list">
+            {% if donations %}
+            {% for d in donations %}
+            <div class="donation-item {{ d.status }}" data-status="{{ d.status }}">
+                <div class="donation-header">
+                    <span class="food-type-badge {{ d.food_type }}">
+                        {{ '🥬' if d.food_type == 'veg' else '🍗' if d.food_type == 'nonveg' else '🌱' }}
+                    </span>
+                    {% if d.donation_type == 'scheduled' %}
+                    <span class="scheduled-badge"
+                        style="background: linear-gradient(135deg, #1a237e, #3949ab); color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
+                        🌙 SCHEDULED
+                    </span>
+                    {% endif %}
+                    <h4>{{ d.food_name }}</h4>
+                    <span class="status-badge {{ d.status }}">{{ d.status|upper }}</span>
+                </div>
+                <div class="donation-details">
+                    <p><strong>Quantity:</strong> {{ d.quantity }}</p>
+                    <p><strong>Category:</strong> {{ d.food_category }}</p>
+                    {% if d.donation_type == 'scheduled' %}
+                    <div
+                        style="background: linear-gradient(135deg, #e8eaf6, #c5cae9); padding: 10px; border-radius: 8px; margin: 10px 0;">
+                        <p style="margin: 0 0 5px 0;"><strong>📅 Pickup Date:</strong> {{ d.scheduled_date.strftime('%b
+                            %d, %Y') if d.scheduled_date else 'Tomorrow' }}</p>
+                        <p style="margin: 0 0 5px 0;"><strong>⏰ Pickup Window:</strong> {{ d.pickup_window_start or
+                            '09:00' }} - {{ d.pickup_window_end or '11:00' }}</p>
+                        <p style="margin: 0 0 5px 0;"><strong>🧊 Storage:</strong> {{ d.storage_method or 'refrigerated'
+                            | replace('_', ' ') | title }}</p>
+                        {% if d.intended_meal %}
+                        <p style="margin: 0;"><strong>🍽️ Best For:</strong> {{ d.intended_meal | title }}</p>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <p><strong>Expiry:</strong> {{ d.expiry.strftime('%b %d, %H:%M') }}</p>
+                    <p><strong>Urgency:</strong> <span class="urgency-{{ d.urgency }}">{{ d.urgency }}</span></p>
+                    {% endif %}
+                </div>
+                {% if d.status == 'claimed' %}
+                <div class="otp-section">
+                    <p class="claimed-info"><strong>Claimed by:</strong> {{ d.claimer.org_name or d.claimer.name }}</p>
+                    <p class="claimed-info"><strong>Claimed at:</strong> {{ d.claimed_at.strftime('%b %d, %H:%M') }}</p>
+
+                    {% if d.delivery_method == 'foodshare_delivery' %}
+                    <!-- Delivery Mode: Show Dual OTPs -->
+                    <div
+                        style="margin-top: 12px; padding: 15px; background-color: #f3e5f5; border-left: 4px solid #9c27b0; border-radius: 4px;">
+                        <h4 style="margin: 0 0 10px 0; color: #7b1fa2;">🚚 FoodShare Delivery Request</h4>
+                        <p style="margin-bottom: 10px;">The receiver has requested delivery. Please prepare the food for
+                            pickup.</p>
+
+                        <div class="dual-otp-section"
+                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                            <div class="otp-box your-otp"
+                                style="background: #fff; padding: 10px; border: 2px solid #7b1fa2; border-radius: 8px; text-align: center;">
+                                <label
+                                    style="display: block; font-size: 0.85rem; color: #7b1fa2; font-weight: 600; margin-bottom: 5px;">Your
+                                    OTP (Give to Driver)</label>
+                                <div class="otp-code" style="font-size: 1.5rem; font-weight: 700; color: #4a148c;">{{
+                                    d.donor_otp }}</div>
+                            </div>
+
+                            <div class="otp-box receiver-otp"
+                                style="background: #f5f5f5; padding: 10px; border: 1px dashed #999; border-radius: 8px; text-align: center;">
+                                <label
+                                    style="display: block; font-size: 0.85rem; color: #666; margin-bottom: 5px;">Receiver's
+                                    OTP</label>
+                                <div class="otp-code" style="font-size: 1.5rem; font-weight: 700; color: #666;">{{ d.otp
+                                    }}</div>
+                            </div>
+                        </div>
+
+                        <div class="receiver-contact">
+                            <p style="margin: 4px 0;"><strong>Delivering To:</strong> {{ d.delivery_address }}</p>
+                            <p style="margin: 4px 0;"><strong>Receiver Phone:</strong> {{ d.claimer.phone }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <!-- Pickup Mode: Show Receiver Info -->
+                    <div
+                        style="margin-top: 12px; padding: 12px; background-color: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px;">
+                        <p style="margin: 0 0 8px 0; font-weight: 600; color: #1976d2;">📞 Receiver Contact Information:
+                        </p>
+                        {% if d.claimer.org_name %}
+                        <p style="margin: 4px 0;"><strong>Organization:</strong> {{ d.claimer.org_name }}</p>
+                        {% endif %}
+                        <p style="margin: 4px 0;"><strong>Contact Person:</strong> {{ d.claimer.name }}</p>
+                        <p style="margin: 4px 0;"><strong>Phone:</strong> {{ d.claimer.phone }}</p>
+                        <p style="margin: 4px 0;"><strong>Email:</strong> {{ d.claimer.email }}</p>
+                    </div>
+                    {% endif %}
+
+                    <p class="help-text" style="margin-top: 12px;">
+                        {% if d.delivery_method == 'foodshare_delivery' %}
+                        💡 Give YOUR OTP to the delivery person to verify pickup.
+                        {% else %}
+                        💡 The receiver will provide you with an OTP during pickup for verification.
+                        {% endif %}
+                    </p>
+                    <button onclick="openOtpModal('{{ d.id }}')" class="btn btn-small">
+                        {% if d.delivery_method == 'foodshare_delivery' %}
+                        Verify Driver OTP
+                        {% else %}
+                        Verify Pickup OTP
+                        {% endif %}
+                    </button>
+                </div>
+                {% endif %}
+                {% if d.status == 'completed' %}
+                <p class="completed-info">✅ Completed at: {{ d.completed_at.strftime('%b %d, %H:%M') }}</p>
+                {% endif %}
+                <p class="donation-time">Posted: {{ d.created_at.strftime('%b %d, %H:%M') }}</p>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="empty-state">No donations found. Post your first donation!</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>⭐ Donor Ratings ({{ total_ratings }})</h2>
+        {% if ratings %}
+        {% for r in ratings %}
+        <div class="rating-item" style="padding: 15px; border-bottom: 1px solid #eee; margin-bottom: 15px;">
+            <div class="rating-header" style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span class="stars" style="color: #FFD700; font-size: 18px;">
+                    {{ '★' * r.rating }}{{ '☆' * (5 - r.rating) }}
+                </span>
+                <span class="rating-date" style="color: #888; font-size: 14px;">{{ r.created_at.strftime('%b %d, %Y')
+                    }}</span>
+            </div>
+            {% if r.feedback %}
+            <p class="rating-feedback" style="color: #555; font-style: italic; margin: 10px 0;">"{{ r.feedback }}"</p>
+            {% endif %}
+            <p class="rating-receiver" style="color: #888; font-size: 14px;">- {{ r.receiver.org_name or r.receiver.name
+                }}</p>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="empty-state">No ratings yet. Complete donations to receive ratings!</p>
+        {% endif %}
+    </section>
+</div>
+
+<div id="otpModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>Verify Pickup</h3>
+        <p>Enter the OTP provided by the receiver:</p>
+        <input type="text" id="verifyOtpInput" placeholder="Enter 4-digit OTP" maxlength="4">
+        <input type="hidden" id="verifyDonationId">
+        <div class="modal-actions">
+            <button onclick="verifyPickup()" class="btn">Verify</button>
+            <button onclick="closeOtpModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Donation Type Toggle
+    function setDonationType(type) {
+        document.getElementById('donationType').value = type;
+
+        // Toggle button styles
+        document.querySelectorAll('.donation-type-toggle .toggle-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.type === type) {
+                btn.classList.add('active');
+            }
+        });
+
+        // Show/hide appropriate fields
+        const immediateFields = document.getElementById('immediateFields');
+        const scheduledFields = document.getElementById('scheduledFields');
+        const urgencyGroup = document.getElementById('urgencyGroup');
+        const safeForInput = document.getElementById('safeFor');
+        const submitBtn = document.getElementById('submitBtn');
+
+        if (type === 'scheduled') {
+            immediateFields.style.display = 'none';
+            scheduledFields.style.display = 'block';
+            urgencyGroup.style.display = 'none';
+            safeForInput.removeAttribute('required');
+            submitBtn.innerHTML = '🌙 Schedule Donation';
+
+            // Set default scheduled date to tomorrow
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            document.getElementById('scheduledDate').value = tomorrow.toISOString().split('T')[0];
+        } else {
+            immediateFields.style.display = 'block';
+            scheduledFields.style.display = 'none';
+            urgencyGroup.style.display = 'block';
+            safeForInput.setAttribute('required', 'required');
+            submitBtn.innerHTML = '🚀 Post Donation';
+        }
+    }
+
+    // Initialize scheduled date on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const scheduledDateInput = document.getElementById('scheduledDate');
+        if (scheduledDateInput) {
+            scheduledDateInput.value = tomorrow.toISOString().split('T')[0];
+            scheduledDateInput.min = tomorrow.toISOString().split('T')[0];
+        }
+
+        // Style for toggle buttons
+        const style = document.createElement('style');
+        style.textContent = `
+            .donation-type-toggle .toggle-btn {
+                flex: 1;
+                padding: 12px 20px;
+                border: 2px solid #ddd;
+                background: #f5f5f5;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+                transition: all 0.3s ease;
+            }
+            .donation-type-toggle .toggle-btn:hover {
+                border-color: #4CAF50;
+                background: #f0fff0;
+            }
+            .donation-type-toggle .toggle-btn.active[data-type="immediate"] {
+                border-color: #4CAF50;
+                background: linear-gradient(135deg, #4CAF50, #66BB6A);
+                color: white;
+            }
+            .donation-type-toggle .toggle-btn.active[data-type="scheduled"] {
+                border-color: #1a237e;
+                background: linear-gradient(135deg, #1a237e, #3949ab);
+                color: white;
+            }
+            .scheduled-section input[type="time"],
+            .scheduled-section input[type="date"],
+            .scheduled-section textarea {
+                color-scheme: dark;
+            }
+            .storage-option:has(input:checked) {
+                border-color: #64b5f6 !important;
+                background: rgba(100, 181, 246, 0.3) !important;
+            }
+        `;
+        document.head.appendChild(style);
+    });
+
+    function toggleNotifications() {
+        const panel = document.getElementById('notificationPanel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function markAllRead() {
+        fetch('/api/notifications/read', { method: 'POST' })
+            .then(() => location.reload());
+    }
+
+    function markNotifRead(id) {
+        fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+    }
+
+    function filterDonations(filter) {
+        document.querySelectorAll('.tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+
+        document.querySelectorAll('.donation-item').forEach(item => {
+            if (filter === 'all' || item.dataset.status === filter) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    function openOtpModal(donationId) {
+        document.getElementById('verifyDonationId').value = donationId;
+        document.getElementById('verifyOtpInput').value = '';
+        document.getElementById('otpModal').style.display = 'flex';
+    }
+
+    function closeOtpModal() {
+        document.getElementById('otpModal').style.display = 'none';
+    }
+
+    function verifyPickup() {
+        const donationId = document.getElementById('verifyDonationId').value;
+        const otp = document.getElementById('verifyOtpInput').value;
+
+        fetch('/donor/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ donationId: parseInt(donationId), otp })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Pickup verified successfully!', 'success');
+                    closeOtpModal();
+                    location.reload();
+                } else {
+                    showToast('Invalid OTP. Please try again.', 'error');
+                }
+            });
+    }
+</script>
+{% endblock %}

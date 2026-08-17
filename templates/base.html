@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FoodShare{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <header>
+        <a href="{{ url_for('index') }}" class="logo">FoodShare 🍏</a>
+        <nav>
+            {% if current_user.is_authenticated %}
+            {% if current_user.role == 'donor' %}
+            <a href="{{ url_for('donor_dashboard') }}"
+                class="{% if request.endpoint == 'donor_dashboard' %}active{% endif %}">Dashboard</a>
+            {% elif current_user.role == 'receiver' %}
+            <a href="{{ url_for('receiver_dashboard') }}"
+                class="{% if request.endpoint == 'receiver_dashboard' %}active{% endif %}">Marketplace</a>
+            {% elif current_user.role == 'admin' %}
+            <a href="{{ url_for('admin_dashboard') }}"
+                class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">Admin</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}">Logout</a>
+            {% else %}
+            <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">Home</a>
+            <a href="{{ url_for('auth') }}" class="{% if request.endpoint == 'auth' %}active{% endif %}">Login</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    <main>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="toast show {{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>&copy; 2026 FoodShare Initiative. All rights reserved.</p>
+    </footer>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            if (toast) {
+                toast.textContent = message;
+                toast.className = 'toast show ' + type;
+                setTimeout(() => {
+                    toast.className = 'toast';
+                }, 3000);
+            }
+        }
+
+        function formatTimeAgo(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes}m ago`;
+            if (hours < 24) return `${hours}h ago`;
+            return `${days}d ago`;
+        }
+
+        // Auto-hide flash messages
+        setTimeout(() => {
+            document.querySelectorAll('.toast.show').forEach(el => {
+                el.classList.remove('show');
+            });
+        }, 4000);
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

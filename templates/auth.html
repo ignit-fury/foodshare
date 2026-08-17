@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Login / Register - FoodShare{% endblock %}
+
+{% block content %}
+<section class="card auth-card">
+    <div class="auth-tabs">
+        <button class="tab-btn active" onclick="showTab('login')">Login</button>
+        <button class="tab-btn" onclick="showTab('register')">Register</button>
+    </div>
+
+    <div id="loginTab" class="tab-content active">
+        <h2>Welcome Back!</h2>
+        <p>Login to your account to continue.</p>
+        <form action="{{ url_for('login') }}" method="POST">
+            <div class="form-group">
+                <label for="loginEmail">Email Address</label>
+                <input type="email" id="loginEmail" name="email" placeholder="Enter your email" required>
+            </div>
+            <div class="form-group">
+                <label for="loginPassword">Password</label>
+                <input type="password" id="loginPassword" name="password" placeholder="Enter your password" required>
+            </div>
+            <div class="form-group">
+                <label for="loginRole">Login As</label>
+                <select id="loginRole" name="role" required>
+                    <option value="">Select Role</option>
+                    <option value="donor">Donor</option>
+                    <option value="receiver">Receiver / NGO</option>
+                    <option value="delivery">🚴 Delivery Partner</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-full">Login</button>
+        </form>
+        <p class="auth-footer">Don't have an account? <a href="#" onclick="showTab('register')">Register here</a></p>
+    </div>
+
+    <div id="registerTab" class="tab-content">
+        <h2>Create Account</h2>
+        <p>Join us in reducing food waste!</p>
+        <form action="{{ url_for('register') }}" method="POST" enctype="multipart/form-data"
+            onsubmit="return validateFiles()">
+            <div class="form-group">
+                <label for="regRole">I am a</label>
+                <select id="regRole" name="role" onchange="toggleReceiverFields()" required>
+                    <option value="">Select Role</option>
+                    <option value="donor">Food Donor</option>
+                    <option value="receiver">Receiver / NGO</option>
+                    <option value="delivery">🚴 Delivery Partner</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="regName">Full Name</label>
+                <input type="text" id="regName" name="name" placeholder="Enter your name" required>
+            </div>
+            <div class="form-group" id="orgNameGroup" style="display: none;">
+                <label for="regOrgName">Organization Name</label>
+                <input type="text" id="regOrgName" name="orgName" placeholder="Enter organization name">
+            </div>
+            <div class="form-group">
+                <label for="regEmail">Email Address</label>
+                <input type="email" id="regEmail" name="email" placeholder="Enter your email" required>
+            </div>
+            <div class="form-group">
+                <label for="regPhone">Phone Number</label>
+                <input type="tel" id="regPhone" name="phone" placeholder="Enter your phone number" required>
+            </div>
+            <div class="form-group">
+                <label for="regAddress">Address</label>
+                <textarea id="regAddress" name="address" rows="2" placeholder="Enter your complete address"
+                    required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="regPassword">Password</label>
+                <input type="password" id="regPassword" name="password" placeholder="Create a password" required>
+            </div>
+            <!-- Personal ID Proof (Required for ALL) -->
+            <div class="form-group">
+                <label for="regPersonalId">Personal Government ID (Aadhar/License)</label>
+                <input type="file" id="regPersonalId" name="personalId" accept=".jpg,.jpeg,.png,.pdf" required>
+                <small class="form-text">Max size: 5MB. Formats: JPG, PNG, PDF</small>
+            </div>
+
+            <!-- Org Proof (Receiver Only) -->
+            <div class="form-group" id="orgProofGroup" style="display: none;">
+                <label for="regOrgProof">Organization/NGO Registration Proof</label>
+                <input type="file" id="regOrgProof" name="orgProof" accept=".jpg,.jpeg,.png,.pdf">
+                <small class="form-text">Max size: 5MB. Formats: JPG, PNG, PDF</small>
+            </div>
+            <div class="form-group" id="aadharGroup" style="display: none;">
+                <label for="regAadhar">Owner's Aadhar Number</label>
+                <input type="text" id="regAadhar" name="aadhar" placeholder="Enter 12-digit Aadhar number"
+                    maxlength="14">
+            </div>
+            <div id="receiverNotice" class="notice notice-info" style="display: none;">
+                <strong>Note:</strong> As a receiver/NGO, your account will need admin approval.
+            </div>
+            <button type="submit" class="btn btn-full">Create Account</button>
+        </form>
+        <p class="auth-footer">Already have an account? <a href="#" onclick="showTab('login')">Login here</a></p>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+        if (tab === 'login') {
+            document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            document.getElementById('loginTab').classList.add('active');
+        } else {
+            document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            document.getElementById('registerTab').classList.add('active');
+        }
+    }
+
+    function toggleReceiverFields() {
+        const role = document.getElementById('regRole').value;
+        const isReceiver = role === 'receiver';
+        document.getElementById('orgNameGroup').style.display = isReceiver ? 'block' : 'none';
+        document.getElementById('orgProofGroup').style.display = isReceiver ? 'block' : 'none';
+        document.getElementById('aadharGroup').style.display = isReceiver ? 'block' : 'none';
+        document.getElementById('receiverNotice').style.display = isReceiver ? 'block' : 'none';
+
+        // Toggle required attribute for Org Proof
+        const orgProofInput = document.getElementById('regOrgProof');
+        if (isReceiver) {
+            orgProofInput.setAttribute('required', 'required');
+        } else {
+            orgProofInput.removeAttribute('required');
+        }
+    }
+
+    function validateFiles() {
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        const personalFile = document.getElementById('regPersonalId').files[0];
+        const orgFile = document.getElementById('regOrgProof').files[0];
+        const role = document.getElementById('regRole').value;
+
+        if (personalFile && personalFile.size > maxSize) {
+            alert('Personal ID file is too large! Maximum size is 5MB.');
+            return false;
+        }
+
+        if (role === 'receiver' && orgFile && orgFile.size > maxSize) {
+            alert('Organization Proof file is too large! Maximum size is 5MB.');
+            return false;
+        }
+
+        return true;
+    }
+</script>
+{% endblock %}
